@@ -1,10 +1,10 @@
-name: Build Android APK
+name: Build Kitchen APK
 
 on: [push, workflow_dispatch]
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v4
@@ -14,21 +14,22 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - uses: android-actions/setup-android@v3
-
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      - run: unzip -o kitchen-android-source.zip
+      - name: Extract project
+        run: unzip -o kitchen-android-source.zip
 
-      - run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
-
-      - run: |
-          cd kitchen-android
-          gradle assembleDebug
+      - name: Build APK
+        working-directory: kitchen-android
+        run: |
+          export ANDROID_HOME=/usr/local/lib/android/sdk
+          export ANDROID_SDK_ROOT=$ANDROID_HOME
+          gradle assembleDebug --no-daemon
 
       - uses: actions/upload-artifact@v4
         with:
-          name: KitchenBookings-APK
+          name: Kitchen-APK
           path: kitchen-android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
