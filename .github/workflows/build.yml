@@ -1,35 +1,50 @@
 name: Build Kitchen APK
-
 on: [push, workflow_dispatch]
-
+permissions:
+  contents: read
 jobs:
   build:
     runs-on: ubuntu-24.04
-
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-
       - name: Extract project
         run: unzip -o kitchen-android-source.zip
-
-      - name: Build APK
+      - name: Build signed APK
         working-directory: kitchen-android
+        env:
+          MAJD_SIGNING_BUNDLE: ${{ secrets.MAJD_SIGNING_BUNDLE }}
+        shell: bash
         run: |
+          set -euo pipefail
+          if [[ -z "$MAJD_SIGNING_BUNDLE" ]]; then
+            echo 'Missing MAJD_SIGNING_BUNDLE repository secret' >&2
+            exit 1
+          fi
+          grep -Fq "applicationId 'com.majd.kitchen.stable'" app/build.gradle
+          IFS=: read -r password encoded <<< "$MAJD_SIGNING_BUNDLE"
+          test -n "$password" && test -n "$encoded"
+          echo "::add-mask::$password"
+          echo "::add-mask::$encoded"
+          export MAJD_SIGN_PASSWORD="$password"
+          export MAJD_SIGN_FILE="$RUNNER_TEMP/majd-release.p12"
+          umask 077
+          trap 'rm -f "$MAJD_SIGN_FILE"' EXIT
+          printf '%s' "$encoded" | base64 --decode > "$MAJD_SIGN_FILE"
           export ANDROID_HOME=/usr/local/lib/android/sdk
-          export ANDROID_SDK_ROOT=$ANDROID_HOME
-          gradle assembleDebug --no-daemon
-
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          gradle assembleRelease --no-daemon
+          APK=app/build/outputs/apk/release/app-release.apk
+          test -f "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK"
       - uses: actions/upload-artifact@v4
         with:
           name: Kitchen-APK
-          path: kitchen-android/app/build/outputs/apk/debug/app-debug.apk
+          path: kitchen-android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
