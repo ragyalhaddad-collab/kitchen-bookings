@@ -1,0 +1,32 @@
+name: Build Majd Voice Test
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Extract independent test project
+        run: unzip -o majd-voice-test.zip -d voice-test
+      - name: Build debug APK
+        working-directory: voice-test
+        run: gradle assembleDebug --no-daemon
+      - name: Verify and rename APK
+        run: |
+          APK=voice-test/app/build/outputs/apk/debug/app-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify "$APK"
+          cp "$APK" Majd-Voice-Test.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Majd-Voice-Test-APK
+          path: Majd-Voice-Test.apk
+          if-no-files-found: error
